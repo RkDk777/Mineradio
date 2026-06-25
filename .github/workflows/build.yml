@@ -2,6 +2,8 @@ name: Build Mineradio
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
