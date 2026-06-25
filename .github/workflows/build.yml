@@ -1,9 +1,5 @@
 name: Build Mineradio
 
-# Triggers:
-# 1) Push a tag like "v*" → build & create a GitHub Release
-# 2) Push to master → build-only (artifacts downloadable from Actions tab)
-# 3) Manual dispatch from Actions tab
 on:
   push:
     tags:
@@ -22,29 +18,24 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build Windows NSIS installer
         run: npm run build:win
         env:
-          # Use npmmirror (China mirror) for Electron binary downloads
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
 
-      - name: Upload Windows installer artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: Mineradio-Windows-x64
           path: dist/Mineradio-*-Setup.exe
 
-  # ── macOS ─────────────────────────────────────────────────
-  build-macos:
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        arch: [x64, arm64]
+  # ── macOS x64 ────────────────────────────────────────────
+  build-macos-x64:
+    runs-on: macos-13
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -53,50 +44,67 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
-      - name: Build macOS (${{ matrix.arch }})
-        run: npx electron-builder --mac dmg zip --${{ matrix.arch }}
-        env:
-          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+      - name: Build macOS x64
+        run: npx electron-builder --mac dmg zip --x64
 
-      - name: Upload macOS artifacts
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Mineradio-macOS-${{ matrix.arch }}
+          name: Mineradio-macOS-x64
           path: |
-            dist/Mineradio-*-macOS-${{ matrix.arch }}.dmg
-            dist/Mineradio-*-macOS-${{ matrix.arch }}.zip
+            dist/Mineradio-*-macOS-x64.dmg
+            dist/Mineradio-*-macOS-x64.zip
 
-  # ── GitHub Release (tag push only) ────────────────────────
+  # ── macOS arm64 ──────────────────────────────────────────
+  build-macos-arm64:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build macOS arm64
+        run: npx electron-builder --mac dmg zip --arm64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mineradio-macOS-arm64
+          path: |
+            dist/Mineradio-*-macOS-arm64.dmg
+            dist/Mineradio-*-macOS-arm64.zip
+
+  # ── GitHub Release ──────────────────────────────────────
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build-windows, build-macos]
+    needs: [build-windows, build-macos-x64, build-macos-arm64]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: release-artifacts
+          merge-multiple: true
 
-      - name: Flatten artifact directories
-        run: |
-          find release-artifacts -type f -exec mv {} ./ \;
-          ls -lh
+      - name: List artifacts
+        run: ls -lhR release-artifacts
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          files: |
-            Mineradio-*-Setup.exe
-            Mineradio-*-macOS-x64.dmg
-            Mineradio-*-macOS-x64.zip
-            Mineradio-*-macOS-arm64.dmg
-            Mineradio-*-macOS-arm64.zip
+          files: release-artifacts/**
           draft: true
           generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
