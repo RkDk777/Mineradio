@@ -24,6 +24,8 @@ let windowFullscreenActive = false;
 let mainWindowStateTimer = null;
 const registeredGlobalHotkeys = new Map();
 
+const IS_WIN = process.platform === 'win32';
+const IS_MAC = process.platform === 'darwin';
 const WINDOWED_ASPECT = 16 / 9;
 const WINDOWED_SCALE = 3 / 4;
 const WINDOWED_MARGIN = 32;
@@ -31,12 +33,13 @@ const MIN_WINDOWED_WIDTH = 960;
 const MIN_WINDOWED_HEIGHT = 540;
 const APP_NAME = 'Mineradio';
 const APP_USER_MODEL_ID = 'com.mineradio.desktop';
-const APP_ICON_ICO = path.join(__dirname, '..', 'build', 'icon.ico');
+const APP_ICON_ICO = path.join(__dirname, '..', 'build', IS_MAC ? 'icon.icns' : 'icon.ico');
 const NETEASE_LOGIN_PARTITION = 'persist:mineradio-netease-login';
 const NETEASE_LOGIN_URL = 'https://music.163.com/#/login';
 const QQ_LOGIN_PARTITION = 'persist:mineradio-qqmusic-login';
 const QQ_LOGIN_URL = 'https://y.qq.com/n/ryqq/profile';
 
+// Chromium performance switches — platform-aware defaults
 const CHROMIUM_PERFORMANCE_SWITCHES = [
   ['autoplay-policy', 'no-user-gesture-required'],
   ['ignore-gpu-blocklist'],
@@ -48,8 +51,15 @@ const CHROMIUM_PERFORMANCE_SWITCHES = [
   ['disable-renderer-backgrounding'],
   ['disable-backgrounding-occluded-windows'],
   ['force_high_performance_gpu'],
-  ['use-angle', 'd3d11'],
 ];
+// Windows-only D3D11 GPU path
+if (IS_WIN) {
+  CHROMIUM_PERFORMANCE_SWITCHES.push(['use-angle', 'd3d11']);
+}
+// macOS: enable Metal backend
+if (IS_MAC) {
+  CHROMIUM_PERFORMANCE_SWITCHES.push(['use-angle', 'metal']);
+}
 for (const [name, value] of CHROMIUM_PERFORMANCE_SWITCHES) {
   if (value == null) app.commandLine.appendSwitch(name);
   else app.commandLine.appendSwitch(name, value);

@@ -41,7 +41,11 @@ function resolveRcedit(projectDir) {
 }
 
 module.exports = async function afterPack(context) {
-  if (context.electronPlatformName !== 'win32') return;
+  // Only win32 needs rcedit icon injection; macOS uses .icns baked by electron-builder
+  if (context.electronPlatformName !== 'win32') {
+    console.log(`  • skipping rcedit icon injection for ${context.electronPlatformName}`);
+    return;
+  }
 
   const appName = context.packager.appInfo.productFilename || 'Mineradio';
   const exePath = path.join(context.appOutDir, `${appName}.exe`);

@@ -1,0 +1,102 @@
+name: Build Mineradio
+
+# Triggers:
+# 1) Push a tag like "v*" → build & create a GitHub Release
+# 2) Push to master → build-only (artifacts downloadable from Actions tab)
+# 3) Manual dispatch from Actions tab
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  # ── Windows ──────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows NSIS installer
+        run: npm run build:win
+        env:
+          # Use npmmirror (China mirror) for Electron binary downloads
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+
+      - name: Upload Windows installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mineradio-Windows-x64
+          path: dist/Mineradio-*-Setup.exe
+
+  # ── macOS ─────────────────────────────────────────────────
+  build-macos:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build macOS (${{ matrix.arch }})
+        run: npx electron-builder --mac dmg zip --${{ matrix.arch }}
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mineradio-macOS-${{ matrix.arch }}
+          path: |
+            dist/Mineradio-*-macOS-${{ matrix.arch }}.dmg
+            dist/Mineradio-*-macOS-${{ matrix.arch }}.zip
+
+  # ── GitHub Release (tag push only) ────────────────────────
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Flatten artifact directories
+        run: |
+          find release-artifacts -type f -exec mv {} ./ \;
+          ls -lh
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            Mineradio-*-Setup.exe
+            Mineradio-*-macOS-x64.dmg
+            Mineradio-*-macOS-x64.zip
+            Mineradio-*-macOS-arm64.dmg
+            Mineradio-*-macOS-arm64.zip
+          draft: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
